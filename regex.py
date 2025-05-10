@@ -105,23 +105,17 @@ class RegexFSM:
             # якщо це фінальний стан і рядок закінчився
             if isinstance(state, TerminationState):
                 return pos == len(s)
-            # зірочка: нуль або більше
             if isinstance(state, StarState):
-                # спробувати нуль входжень
                 if dp(idx+1, pos):
                     return True
-                # спробувати спожити один символ і залишитися на цьому стані
                 if pos < len(s) and state.checking_state.check_self(s[pos]):
                     return dp(idx, pos+1)
                 return False
-            # плюс: один або більше
             if isinstance(state, PlusState):
                 if pos >= len(s) or not state.checking_state.check_self(s[pos]):
                     return False
-                # наступний символ
                 if dp(idx, pos+1):
                     return True
-                # перейти до наступного стану
                 return dp(idx+1, pos+1)
             if pos < len(s) and state.check_self(s[pos]):
                 return dp(idx+1, pos+1)
