@@ -1,139 +1,137 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 
-
 class State(ABC):
-
-    @abstractmethod
     def __init__(self) -> None:
-        pass
+        self.next_states: list[State] = []
 
     @abstractmethod
     def check_self(self, char: str) -> bool:
-        """
-        function checks whether occured character is handled by current ctate
-        """
+        """Check if this state matches the given character"""
         pass
-
+    
     def check_next(self, next_char: str) -> State | Exception:
         for state in self.next_states:
             if state.check_self(next_char):
                 return state
         raise NotImplementedError("rejected string")
 
-
 class StartState(State):
-    next_states: list[State] = []
-
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
-    def check_self(self, char):
-        return super().check_self(char)
-
-
-class TerminationState(State):
-    pass  # Implement
-
-
-class DotState(State):
-    """
-    state for . character (any character accepted)
-    """
-
-    next_states: list[State] = []
-
-    def __init__(self):
-        super().__init__()
-
-    def check_self(self, char: str):
-        pass  # Implement
-
-
-class AsciiState(State):
-    """
-    state for alphabet letters or numbers
-    """
-
-    next_states: list[State] = []
-    curr_sym = ""
-
-    def __init__(self, symbol: str) -> None:
-        pass  # Implement
-
-    def check_self(self, curr_char: str) -> State | Exception:
-        pass  # Implement
-
-
-class StarState(State):
-
-    next_states: list[State] = []
-
-    def __init__(self, checking_state: State):
-        pass  # Implement
-
-    def check_self(self, char):
-        for state in self.next_states:
-            if state.check_self(char):
-                return True
-
+    def check_self(self, char: str) -> bool:
+        # Start state does not consume any character
         return False
 
+class TerminationState(State):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def check_self(self, char: str) -> bool:
+        # Termination state does not consume characters
+        return False
+
+class DotState(State):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def check_self(self, char: str) -> bool:
+        # Matches any single character
+        return True
+
+class AsciiState(State):
+    def __init__(self, symbol: str) -> None:
+        super().__init__()
+        self.curr_sym = symbol
+
+    def check_self(self, char: str) -> bool:
+        return char == self.curr_sym
+
+class StarState(State):
+    def __init__(self, checking_state: State) -> None:
+        super().__init__()
+        self.next_states: list[State] = []
+        self.checking_state = checking_state
+
+    def check_self(self, char: str) -> bool:
+        # Handled by engine, state itself does not directly match
+        return False
 
 class PlusState(State):
-    next_states: list[State] = []
+    def __init__(self, checking_state: State) -> None:
+        super().__init__()
+        self.next_states: list[State] = []
+        self.checking_state = checking_state
 
-    def __init__(self, checking_state: State):
-        pass  # Implement
-
-    def check_self(self, char):
-        pass  # Implement
-
+    def check_self(self, char: str) -> bool:
+        # Handled by engine, state itself does not directly match
+        return False
 
 class RegexFSM:
     curr_state: State = StartState()
 
     def __init__(self, regex_expr: str) -> None:
+        self.states: list[State] = [StartState()]
+        i = 0
+        while i < len(regex_expr):
+            c = regex_expr[i]
+            if c == '.':
+                base = DotState()
+            elif c not in ['*', '+'] and c.isascii():
+                base = AsciiState(c)
+            else:
+                raise AttributeError(f"Unsupported or misplaced character '{c}' in pattern")
+            quant = None
+            if i + 1 < len(regex_expr) and regex_expr[i+1] in ['*', '+']:
+                quant = regex_expr[i+1]
+                i += 1
+            if quant == '*':
+                self.states.append(StarState(base))
+            elif quant == '+':
+                self.states.append(PlusState(base))
+            else:
+                self.states.append(base)
+            i += 1
+        self.states.append(TerminationState())
 
-        prev_state = self.curr_state
-        tmp_next_state = self.curr_state
 
-        for char in regex_expr:
-            tmp_next_state = self.__init_next_state(char, prev_state, tmp_next_state)
-            prev_state.next_states.append(tmp_next_state)
-
-    def __init_next_state(
-        self, next_token: str, prev_state: State, tmp_next_state: State
-    ) -> State:
-        new_state = None
-
-        match next_token:
-            case next_token if next_token == ".":
-                new_state = DotState()
-            case next_token if next_token == "*":
-                new_state = StarState(tmp_next_state)
-                # here you have to think, how to do it.
-
-            case next_token if next_token == "+":
-                pass  # Implement
-
-            case next_token if next_token.isascii():
-                new_state = AsciiState(next_token)
-
-            case _:
-                raise AttributeError("Character is not supported")
-
-        return new_state
-
-    def check_string(self):
-        pass  # Implement
+    def check_string(self, s: str) -> bool:
+        def dp(idx: int, pos: int) -> bool:
+            state = self.states[idx]
+            # пропустити початковий стан
+            if isinstance(state, StartState):
+                return dp(idx+1, pos)
+            # якщо це фінальний стан і рядок закінчився
+            if isinstance(state, TerminationState):
+                return pos == len(s)
+            # зірочка: нуль або більше
+            if isinstance(state, StarState):
+                # спробувати нуль входжень
+                if dp(idx+1, pos):
+                    return True
+                # спробувати спожити один символ і залишитися на цьому стані
+                if pos < len(s) and state.checking_state.check_self(s[pos]):
+                    return dp(idx, pos+1)
+                return False
+            # плюс: один або більше
+            if isinstance(state, PlusState):
+                if pos >= len(s) or not state.checking_state.check_self(s[pos]):
+                    return False
+                # наступний символ
+                if dp(idx, pos+1):
+                    return True
+                # перейти до наступного стану
+                return dp(idx+1, pos+1)
+            if pos < len(s) and state.check_self(s[pos]):
+                return dp(idx+1, pos+1)
+            return False
+        return dp(0, 0)
 
 
 if __name__ == "__main__":
     regex_pattern = "a*4.+hi"
-
     regex_compiled = RegexFSM(regex_pattern)
-
-    print(regex_compiled.check_string("aaaaaa4uhi"))  # True
-    print(regex_compiled.check_string("4uhi"))  # True
-    print(regex_compiled.check_string("meow"))  # False
+    print(regex_compiled.check_string("aaaaaa4uhi"))
+    print(regex_compiled.check_string("4uhi"))
+    print(regex_compiled.check_string("meow"))
